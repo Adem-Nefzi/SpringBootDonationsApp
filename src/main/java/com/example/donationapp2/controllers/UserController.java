@@ -14,7 +14,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
-@CrossOrigin (origins ="*")
+@CrossOrigin(origins = "*")
 public class UserController {
 
     private final UserService userService;
@@ -24,6 +24,24 @@ public class UserController {
     public UserController(UserService userService, PasswordEncoder passwordEncoder) {
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
+    }
+
+    // Admin: Create new user
+    @PostMapping("/profile")
+    public ResponseEntity<?> createUser(@RequestBody User newUser) {
+        // Check if email already exists
+        if (userService.getUserByEmail(newUser.getEmail()) != null) {
+            return new ResponseEntity<>("Email already in use", HttpStatus.BAD_REQUEST);
+        }
+
+        // Set timestamps and encode password
+        newUser.setCreatedAt(LocalDateTime.now());
+        newUser.setUpdatedAt(LocalDateTime.now());
+        newUser.setPasswordHash(passwordEncoder.encode(newUser.getPasswordHash()));
+
+        // Save new user
+        User savedUser = userService.saveUser(newUser);
+        return new ResponseEntity<>(savedUser, HttpStatus.CREATED);
     }
 
     // Get current user profile
@@ -94,46 +112,29 @@ public class UserController {
 
     // Get all users (Admin only)
     @GetMapping("/admin/all")
-    public ResponseEntity<?> getAllUsers(HttpSession session) {
-        User currentUser = (User) session.getAttribute("currentUser");
-        if (currentUser == null || currentUser.getUserType() != User.UserType.ADMIN) {
-            return new ResponseEntity<>("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
+    public ResponseEntity<?> getAllUsers() {
         List<User> users = userService.getAllUsers();
         return new ResponseEntity<>(users, HttpStatus.OK);
     }
 
     // Get user by ID (Admin only)
     @GetMapping("/admin/{id}")
-    public ResponseEntity<?> getUserById(@PathVariable Long id, HttpSession session) {
-        User currentUser = (User) session.getAttribute("currentUser");
-        if (currentUser == null || currentUser.getUserType() != User.UserType.ADMIN) {
-            return new ResponseEntity<>("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
+    public ResponseEntity<?> getUserById(@PathVariable Long id) {
         User user = userService.getUserById(id);
         if (user == null) {
             return new ResponseEntity<>("User not found", HttpStatus.NOT_FOUND);
         }
-
         return new ResponseEntity<>(user, HttpStatus.OK);
     }
 
     // Update user by ID (Admin only)
     @PutMapping("/admin/{id}")
-    public ResponseEntity<?> updateUser(@PathVariable Long id, @RequestBody User updatedUser, HttpSession session) {
-        User currentUser = (User) session.getAttribute("currentUser");
-        if (currentUser == null || currentUser.getUserType() != User.UserType.ADMIN) {
-            return new ResponseEntity<>("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
+    public ResponseEntity<?> updateUser(@PathVariable Long id, @RequestBody User updatedUser) {
         User user = userService.getUserById(id);
         if (user == null) {
             return new ResponseEntity<>("User not found", HttpStatus.NOT_FOUND);
         }
 
-        // Update fields
         user.setFirstName(updatedUser.getFirstName());
         user.setLastName(updatedUser.getLastName());
         user.setPhone(updatedUser.getPhone());
@@ -143,7 +144,6 @@ public class UserController {
         user.setUserType(updatedUser.getUserType());
         user.setUpdatedAt(LocalDateTime.now());
 
-        // Only update password if provided
         if (updatedUser.getPasswordHash() != null && !updatedUser.getPasswordHash().isEmpty()) {
             user.setPasswordHash(passwordEncoder.encode(updatedUser.getPasswordHash()));
         }
@@ -154,12 +154,7 @@ public class UserController {
 
     // Delete user by ID (Admin only)
     @DeleteMapping("/admin/{id}")
-    public ResponseEntity<?> deleteUser(@PathVariable Long id, HttpSession session) {
-        User currentUser = (User) session.getAttribute("currentUser");
-        if (currentUser == null || currentUser.getUserType() != User.UserType.ADMIN) {
-            return new ResponseEntity<>("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
+    public ResponseEntity<?> deleteUser(@PathVariable Long id) {
         User user = userService.getUserById(id);
         if (user == null) {
             return new ResponseEntity<>("User not found", HttpStatus.NOT_FOUND);

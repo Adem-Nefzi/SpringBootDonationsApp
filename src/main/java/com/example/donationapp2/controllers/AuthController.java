@@ -9,10 +9,15 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -54,30 +59,18 @@ public class AuthController {
 
     @PostMapping("/register/association")
     public ResponseEntity<?> registerAssociation(@RequestBody Map<String, Object> payload, HttpSession session) {
-        // Extract user data
-        User user = new User();
-        user.setFirstName((String) payload.get("firstName"));
-        user.setLastName((String) payload.get("lastName"));
-        user.setEmail((String) payload.get("email"));
-        user.setPhone((String) payload.get("phone"));
-        user.setAddress((String) payload.get("address"));
-        user.setUserType(User.UserType.RECIPIENT);
-        user.setCreatedAt(LocalDateTime.now());
-        user.setPasswordHash(passwordEncoder.encode((String) payload.get("password")));
+        String email = (String) payload.get("associationEmail");
 
         // Check if email already exists
-        if (userService.getUserByEmail(user.getEmail()) != null) {
-            throw new EmailAlreadyExistsException("Email already in use: " + user.getEmail());
+        if (userService.getUserByEmail(email) != null ||
+            associationService.getAssociationByEmail(email) != null) {
+            throw new EmailAlreadyExistsException("Email already in use: " + email);
         }
 
-        // Save the user first
-        User savedUser = userService.saveUser(user);
-
-        // Create the association linked to this user
+        // Create the association without linking to a user
         Association association = new Association();
-        association.setUser(savedUser);
         association.setName((String) payload.get("associationName"));
-        association.setEmail((String) payload.get("associationEmail"));
+        association.setEmail(email);
         association.setPassword(passwordEncoder.encode((String) payload.get("password")));
         association.setPhone((String) payload.get("associationPhone"));
         association.setAddress((String) payload.get("associationAddress"));
@@ -85,25 +78,22 @@ public class AuthController {
         association.setCategory((String) payload.get("category"));
         association.setLogoUrl((String) payload.get("logoUrl"));
 
+        // No user assignment needed
+
         Association savedAssociation = associationService.saveAssociation(association);
 
-        // Set user and association in session
-        session.setAttribute("currentUser", savedUser);
+        // Set association in session
         session.setAttribute("currentAssociation", savedAssociation);
         session.setAttribute("userType", "association");
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("user", savedUser);
-        response.put("association", savedAssociation);
-
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        return new ResponseEntity<>(savedAssociation, HttpStatus.CREATED);
     }
-
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> credentials, HttpSession session) {
         System.out.println("Login request received: " + credentials);
         String email = credentials.get("email");
         String password = credentials.get("password");
+        String userType = credentials.get("userType"); // This can be "user" or "association"
 
         // Input validation
         if (email == null || password == null) {
@@ -112,15 +102,51 @@ public class AuthController {
             );
         }
 
+        // Try association login if userType is explicitly set to "association"
+        if ("association".equals(userType)) {
+            Association association = associationService.getAssociationByEmail(email);
+
+            if (association != null && passwordEncoder.matches(password, association.getPassword())) {
+                // Create response with association data
+                Map<String, Object> response = new HashMap<>();
+                response.put("association", association);
+
+                // Set session attributes
+                session.setAttribute("currentAssociation", association);
+                session.setAttribute("userType", "association");
+
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Invalid email or password for association"));
+            }
+        }
+
+        // Otherwise try user login (default)
         User user = userService.getUserByEmail(email);
 
-        // Authentication check
+        // Authentication check for user
         if (user == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+            // If user login failed, try association login as fallback (only if userType is not specified)
+            if (userType == null) {
+                Association association = associationService.getAssociationByEmail(email);
+
+                if (association != null && passwordEncoder.matches(password, association.getPassword())) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("association", association);
+
+                    session.setAttribute("currentAssociation", association);
+                    session.setAttribute("userType", "association");
+
+                    return ResponseEntity.ok(response);
+                }
+            }
+
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("message", "Invalid email or password"));
         }
 
-        // Create consistent response structure
+        // User login succeeded
         Map<String, Object> response = new HashMap<>();
         response.put("user", user);
 
@@ -134,6 +160,13 @@ public class AuthController {
 
         // Set session attributes
         session.setAttribute("currentUser", user);
+        UsernamePasswordAuthenticationToken authToken =
+                new UsernamePasswordAuthenticationToken(user.getEmail(), null, new ArrayList<>());
+
+        SecurityContextHolder.getContext().setAuthentication(authToken);
+
+        SecurityContext context = SecurityContextHolder.getContext();
+        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
         session.setAttribute("userType", user.getUserType().toString().toLowerCase());
 
         if (response.containsKey("association")) {

@@ -1,6 +1,7 @@
 package com.example.donationapp2.repositories;
 
 import com.example.donationapp2.models.Association;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,4 +22,14 @@ public interface AssociationRepository extends JpaRepository<Association, Long> 
     List<Association> findByNameContainingAndCategoryIgnoreCase(
             @Param("name") String name,
             @Param("category") String category);
+
+	List<Association> findByNameContainingAndCategory(String name, String category);
+
+	List<Association> findByNameContaining(String name);
+
+	List<Association> findByCategory(String category);
+
+    Association findByEmailIgnoreCase(String email);
+
+	    List<Association> findByNameContainingIgnoreCaseAndCategoryIgnoreCase(String name, String category);
 }

@@ -54,4 +54,78 @@ public class Donation {
     public enum DonationStatus {
         SCHEDULED, COMPLETED, CANCELLED
     }
+
+	public Long getId() {
+		return id;
+	}
+
+	public void setId(Long id) {
+		this.id = id;
+	}
+
+	public DonationOffer getDonationOffer() {
+		return donationOffer;
+	}
+
+	public void setDonationOffer(DonationOffer donationOffer) {
+		this.donationOffer = donationOffer;
+	}
+
+	public User getDonor() {
+		return donor;
+	}
+
+	public void setDonor(User donor) {
+		this.donor = donor;
+	}
+
+	public User getRecipient() {
+		return recipient;
+	}
+
+	public void setRecipient(User recipient) {
+		this.recipient = recipient;
+	}
+
+	public Application getApplication() {
+		return application;
+	}
+
+	public void setApplication(Application application) {
+		this.application = application;
+	}
+
+	public LocalDateTime getHandoverDate() {
+		return handoverDate;
+	}
+
+	public void setHandoverDate(LocalDateTime handoverDate) {
+		this.handoverDate = handoverDate;
+	}
+
+	public DonationStatus getStatus() {
+		return status;
+	}
+
+	public void setStatus(DonationStatus status) {
+		this.status = status;
+	}
+
+	public String getFeedbackDonor() {
+		return feedbackDonor;
+	}
+
+	public void setFeedbackDonor(String feedbackDonor) {
+		this.feedbackDonor = feedbackDonor;
+	}
+
+	public String getFeedbackRecipient() {
+		return feedbackRecipient;
+	}
+
+	public void setFeedbackRecipient(String feedbackRecipient) {
+		this.feedbackRecipient = feedbackRecipient;
+	}
+    
+    
 }

@@ -15,7 +15,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/associations")
-@CrossOrigin (origins ="*")
+@CrossOrigin(origins = "*")
 public class AssociationController {
 
     private final AssociationService associationService;
@@ -32,6 +32,24 @@ public class AssociationController {
     public ResponseEntity<List<Association>> getAllAssociations() {
         List<Association> associations = associationService.getAllAssociations();
         return new ResponseEntity<>(associations, HttpStatus.OK);
+    }
+
+    @PostMapping
+    public ResponseEntity<?> registerAssociation(@RequestBody Association newAssociation) {
+        // Check if email is already used
+        if (associationService.getAssociationByEmail(newAssociation.getEmail()) != null) {
+            return new ResponseEntity<>("Email already in use", HttpStatus.BAD_REQUEST);
+        }
+
+        // Hash password before saving
+        if (newAssociation.getPassword() != null && !newAssociation.getPassword().isEmpty()) {
+            newAssociation.setPassword(passwordEncoder.encode(newAssociation.getPassword()));
+        } else {
+            return new ResponseEntity<>("Password is required", HttpStatus.BAD_REQUEST);
+        }
+
+        Association saved = associationService.saveAssociation(newAssociation);
+        return new ResponseEntity<>(saved, HttpStatus.CREATED);
     }
 
     // Get association by ID (accessible to all users)
@@ -86,35 +104,34 @@ public class AssociationController {
             return new ResponseEntity<>("Not logged in as association", HttpStatus.UNAUTHORIZED);
         }
 
-        // Get the latest association data from the database
         Association association = associationService.getAssociationById(currentAssociation.getId());
         if (association == null) {
             return new ResponseEntity<>("Association not found", HttpStatus.NOT_FOUND);
         }
 
-        // Update fields
-        association.setName(updatedAssociation.getName());
-        association.setEmail(updatedAssociation.getEmail());
-        association.setPhone(updatedAssociation.getPhone());
-        association.setAddress(updatedAssociation.getAddress());
-        association.setDescription(updatedAssociation.getDescription());
-        association.setCategory(updatedAssociation.getCategory());
-        association.setLogoUrl(updatedAssociation.getLogoUrl());
-        association.setFoundationDate(updatedAssociation.getFoundationDate());
+        // Update fields safely
+        if (updatedAssociation.getName() != null) association.setName(updatedAssociation.getName());
+        if (updatedAssociation.getEmail() != null) association.setEmail(updatedAssociation.getEmail());
+        if (updatedAssociation.getPhone() != null) association.setPhone(updatedAssociation.getPhone());
+        if (updatedAssociation.getAddress() != null) association.setAddress(updatedAssociation.getAddress());
+        if (updatedAssociation.getDescription() != null) association.setDescription(updatedAssociation.getDescription());
+        if (updatedAssociation.getCategory() != null) association.setCategory(updatedAssociation.getCategory());
+        if (updatedAssociation.getLogoUrl() != null) association.setLogoUrl(updatedAssociation.getLogoUrl());
+        if (updatedAssociation.getFoundationDate() != null) association.setFoundationDate(updatedAssociation.getFoundationDate());
 
-        // Only update password if provided
+        // Password update
         if (updatedAssociation.getPassword() != null && !updatedAssociation.getPassword().isEmpty()) {
             association.setPassword(passwordEncoder.encode(updatedAssociation.getPassword()));
         }
 
-        // Save updated association
         Association savedAssociation = associationService.saveAssociation(association);
 
-        // Update session
+        // Refresh session
         session.setAttribute("currentAssociation", savedAssociation);
 
         return new ResponseEntity<>(savedAssociation, HttpStatus.OK);
     }
+
 
     // Delete current association (for logged-in associations)
     @DeleteMapping("/profile")
@@ -138,17 +155,24 @@ public class AssociationController {
     @PostMapping("/admin")
     public ResponseEntity<?> createAssociation(@RequestBody Association association, HttpSession session) {
         User currentUser = (User) session.getAttribute("currentUser");
+
         if (currentUser == null || currentUser.getUserType() != User.UserType.ADMIN) {
             return new ResponseEntity<>("Unauthorized", HttpStatus.FORBIDDEN);
         }
 
+        // Set the user (admin) for the association
+        association.setUser(currentUser);
+
+        // Encode the password if provided
         if (association.getPassword() != null) {
             association.setPassword(passwordEncoder.encode(association.getPassword()));
         }
 
+        // Save the association
         Association savedAssociation = associationService.saveAssociation(association);
         return new ResponseEntity<>(savedAssociation, HttpStatus.CREATED);
     }
+
 
     // Admin: Update association by ID
     @PutMapping("/admin/{id}")
@@ -198,5 +222,32 @@ public class AssociationController {
 
         associationService.deleteAssociation(id);
         return new ResponseEntity<>("Association deleted successfully", HttpStatus.OK);
+    }
+
+    // Admin: Get all associations
+    @GetMapping("/admin/all")
+    public ResponseEntity<?> getAllAssociationsAdmin(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String category,
+            HttpSession session) {
+
+        User currentUser = (User) session.getAttribute("currentUser");
+        if (currentUser == null || currentUser.getUserType() != User.UserType.ADMIN) {
+            return new ResponseEntity<>("Unauthorized", HttpStatus.FORBIDDEN);
+        }
+
+        List<Association> associations;
+
+        if (name != null && category != null) {
+            associations = associationService.findAssociationsByNameAndCategory(name, category);
+        } else if (name != null) {
+            associations = associationService.findAssociationsByName(name);
+        } else if (category != null) {
+            associations = associationService.findAssociationsByCategory(category);
+        } else {
+            associations = associationService.getAllAssociations();
+        }
+
+        return new ResponseEntity<>(associations, HttpStatus.OK);
     }
 }
